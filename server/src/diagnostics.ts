@@ -6,7 +6,7 @@ import { NavigatorSettings, CompilationResults, PerlDocument } from "./types";
 import {
 	WorkspaceFolder
 } from 'vscode-languageserver-protocol';
-import { dirname, join } from 'path';
+import { basename, dirname, join } from 'path';
 import Uri from 'vscode-uri';
 import { getIncPaths, async_execFile, nLog } from './utils';
 import { buildNav } from "./parseDocument";
@@ -73,6 +73,12 @@ function getInquisitor(): string[]{
 function getAdjustedPerlCode(textDocument: TextDocument, filePath: string): string {
     let code = textDocument.getText();
 
+    // make sure cpanfiles run with Module::CPANfile::Environment bindings
+    let setup_cpanfile_env = '';
+    if ( basename(filePath).match(/^cpanfile\b.*/) ) {
+        setup_cpanfile_env = 'if ( eval { require Module::CPANfile::Environment } ) { Module::CPANfile::Environment->new->bind };';
+    }
+
     // module name regex stolen from https://metacpan.org/pod/Module::Runtime#$module_name_rx
     const module_name_rx = /^\s*package[\s\n]+([A-Z_a-z][0-9A-Z_a-z]*(?:::[0-9A-Z_a-z]+)*)/gm;
     let register_inc_path = '';
@@ -89,7 +95,7 @@ function getAdjustedPerlCode(textDocument: TextDocument, filePath: string): stri
         }
     }
 
-    code = `local \$0; use lib_bs22::SourceStash; BEGIN { \$0 = '${filePath}'; if (\$INC{'FindBin.pm'}) { FindBin->again(); }; \$lib_bs22::SourceStash::filename = '${filePath}'; print "Setting file" . __FILE__; ${register_inc_path} }\n# line 0 \"${filePath}\"\ndie('Not needed, but die for safety');\n` + code;
+    code = `local \$0; use lib_bs22::SourceStash; BEGIN { \$0 = '${filePath}'; if (\$INC{'FindBin.pm'}) { FindBin->again(); }; \$lib_bs22::SourceStash::filename = '${filePath}'; print "Setting file" . __FILE__; ${register_inc_path} ${setup_cpanfile_env} }\n# line 0 \"${filePath}\"\ndie('Not needed, but die for safety');\n` + code;
     return code;
 }
 
